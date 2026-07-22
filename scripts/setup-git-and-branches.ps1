@@ -3,9 +3,9 @@
 # Simula a colaboração de 2 Desenvolvedores (Alice e Bob) com ramos e validação no CI/CD
 # ==============================================================================
 
-Write-Host "================================================================" -ForegroundColor Cipher
+Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "       DevSecOps Multi-User Branch & CI/CD Setup Script        " -ForegroundColor Cyan
-Write-Host "================================================================" -ForegroundColor Cipher
+Write-Host "================================================================" -ForegroundColor Cyan
 
 $ProjectDir = Get-Location
 
@@ -79,9 +79,9 @@ Write-Host "--> Branch 'feature/bob-insecure-feature' criada e commit feito pelo
 # Voltar para main
 git checkout main
 
-Write-Host "`n================================================================" -ForegroundColor Cipher
+Write-Host "`n================================================================" -ForegroundColor Cyan
 Write-Host "                   Configuração Concluída!                      " -ForegroundColor Green
-Write-Host "================================================================" -ForegroundColor Cipher
+Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "`nResumo de Branches Locais Criadas:" -ForegroundColor Yellow
 Write-Host " 1. main                      (Código Base Limpo)" -ForegroundColor White
 Write-Host " 2. feature/alice-secure-auth (Passará nos Security Quality Gates)" -ForegroundColor Green
