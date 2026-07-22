@@ -1,45 +1,25 @@
-# ==========================================
-# DevSecOps Hardened Dockerfile
-# Baseado nas recomendações de Hardening Trivy / CIS Benchmark
-# ==========================================
+# ==============================================================================
+# Dockerfile com Vulnerabilidades e Falhas de Hardening Propositadas (Para Testar Trivy)
+# ==============================================================================
 
-# Estágio 1: Build & Dependências (Builder)
-FROM node:20-alpine AS builder
+# 1. IMAGEM BASE DESATUALIZADA E VULNERÁVEL (Trivy irá detetar dezenas de CVEs Críticas!)
+FROM php:7.4-apache
 
-WORKDIR /app
+# 2. SEGREDO HARDCODED EM VARIÁVEL DE AMBIENTE (Trivy IaC & Gitleaks scan)
+ENV DB_ROOT_PASSWORD="UnsecureRootPassword123!"
+ENV AWS_ACCESS_KEY_ID="MOCK_AWS_ACCESS_KEY_SECRET_12345"
 
-# Copiar apenas os manifestos de dependências para otimizar a cache de camadas
-COPY package*.json ./
+WORKDIR /var/www/html
 
-# Instalação estrita para produção
-RUN npm ci --only=production
+# Copiar ficheiros PHP e Node.js
+COPY src/ /var/www/html/
 
-# Estágio 2: Imagem Final de Execução (Production Runner)
-FROM node:20-alpine AS runner
+# 3. EXPOSIÇÃO DE PORTA INSEGURA (SSH Port Expose)
+EXPOSE 22
+EXPOSE 80
 
-# Atualizar pacotes do sistema operativo para corrigir vulnerabilidades conhecidas da imagem base (Trivy requirement)
-RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+# 4. EXECUÇÃO COMO UTILIZADOR ROOT (Violador de Hardening CIS Benchmark / Trivy Exit Code 1)
+# Repare que NÃO definimos "USER www-data", o container corre como root!
+USER root
 
-WORKDIR /app
-
-# Definir ambiente seguro
-ENV NODE_ENV=production
-
-# Copiar dependências e ficheiros da aplicação a partir do builder
-COPY --chown=node:node --from=builder /app/node_modules ./node_modules
-COPY --chown=node:node package*.json ./
-COPY --chown=node:node src/ ./src/
-COPY --chown=node:node index.html styles.css app.js ./
-
-# Definir utilizador não-root para execução (Hardening Princípio de Menor Privilégio)
-USER node
-
-# Expor porta sem privilégios de root
-EXPOSE 3000
-
-# Healthcheck interno do container para monitorização
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
-
-# Comando de arranque da aplicação
-CMD ["node", "src/server.js"]
+CMD ["apache2-foreground"]
