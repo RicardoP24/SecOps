@@ -1,0 +1,29 @@
+rules:
+  - id: detect-eval-with-code
+    patterns:
+      - pattern: eval(...)
+    message: "Uso perigoso da função eval() detetado! Isso pode levar a RCE (Remote Code Execution) - OWASP A03:2021-Injection."
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  - id: detect-hardcoded-credentials
+    patterns:
+      - pattern-either:
+          - pattern: $X = "bearer $TOKEN"
+          - pattern: const $SECRET = "...";
+    message: "Evite armazenar credenciais ou tokens diretamente no código fonte."
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  - id: express-helmet-missing
+    patterns:
+      - pattern-inside: |
+          const express = require('express');
+          ...
+      - pattern-not-inside: |
+          ...
+          app.use(helmet(...));
+          ...
+    message: "A aplicação Express não está a utilizar o middleware Helmet para hardening de cabeçalhos HTTP."
+    languages: [javascript]
+    severity: WARNING

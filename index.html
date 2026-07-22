@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevSecOps & SSDLC Pipeline Dashboard | GitHub Actions Security</title>
+  <meta name="description" content="Dashboard interativo para visualização e aprendizagem de pipelines DevSecOps no GitHub Actions com Gitleaks, Semgrep, SonarQube, Snyk e Trivy.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700;800&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Sidebar / Top Navigation -->
+    <header class="navbar">
+      <div class="logo">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>DevSecOps <strong>SSDLC Engine</strong></span>
+      </div>
+      <div class="nav-badges">
+        <span class="badge badge-github"><i class="fa-brands fa-github"></i> GitHub Actions</span>
+        <span class="badge badge-status"><i class="fa-solid fa-circle-check"></i> Quality Gate Active</span>
+      </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="hero-content">
+        <h1>Ciclo de Vida Seguro de Software <span class="gradient-text">(SSDLC)</span></h1>
+        <p class="hero-subtitle">
+          Integração automatizada de testes de segurança "Shift-Left" no pipeline CI/CD do GitHub Actions. Deteção precoce de vulnerabilidades desde o commit até ao container em produção.
+        </p>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon icon-gitleaks"><i class="fa-solid fa-key"></i></div>
+            <div class="stat-info">
+              <h3>Secret Scan</h3>
+              <p>Gitleaks</p>
+            </div>
+            <span class="stat-status pass">0 Credentials Exposed</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-semgrep"><i class="fa-solid fa-code"></i></div>
+            <div class="stat-info">
+              <h3>SAST Lightweight</h3>
+              <p>Semgrep</p>
+            </div>
+            <span class="stat-status pass">OWASP Top 10 Clean</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-sonarqube"><i class="fa-solid fa-cubes"></i></div>
+            <div class="stat-info">
+              <h3>SAST & Quality Gate</h3>
+              <p>SonarQube</p>
+            </div>
+            <span class="stat-status pass">Rating A (0 Vulnerabilities)</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-snyk"><i class="fa-solid fa-box-open"></i></div>
+            <div class="stat-info">
+              <h3>SCA Dependencies</h3>
+              <p>Snyk</p>
+            </div>
+            <span class="stat-status pass">0 High CVEs</span>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon icon-trivy"><i class="fa-solid fa-docker"></i></div>
+            <div class="stat-info">
+              <h3>Container Hardening</h3>
+              <p>Trivy</p>
+            </div>
+            <span class="stat-status pass">Alpine Hardened</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pipeline Visual Workflow -->
+    <main class="main-content">
+      <section class="section-card">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-diagram-project"></i> Pipeline CI/CD DevSecOps no GitHub Actions</h2>
+          <button id="run-simulation-btn" class="btn btn-primary">
+            <i class="fa-solid fa-play"></i> Simular Pipeline de Segurança
+          </button>
+        </div>
+
+        <div class="pipeline-visual">
+          <div class="pipeline-step" data-stage="secrets">
+            <div class="step-header">
+              <span class="step-num">01</span>
+              <span class="step-badge">Pre-Commit / Commit</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-key step-icon"></i>
+              <h4>Gitleaks</h4>
+              <p>Deteção Ativa de Credenciais</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-check"></i> Pronto</span>
+            </div>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-step" data-stage="semgrep">
+            <div class="step-header">
+              <span class="step-num">02</span>
+              <span class="step-badge">SAST Estático</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-code step-icon"></i>
+              <h4>Semgrep</h4>
+              <p>Regras & Antipadrões</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-check"></i> Pronto</span>
+            </div>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-step" data-stage="sonarqube">
+            <div class="step-header">
+              <span class="step-num">03</span>
+              <span class="step-badge">SAST & Quality Gate</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-cubes step-icon"></i>
+              <h4>SonarQube</h4>
+              <p>Qualidade & Cobertura</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-check"></i> Pronto</span>
+            </div>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-step" data-stage="snyk">
+            <div class="step-header">
+              <span class="step-num">04</span>
+              <span class="step-badge">SCA Dependências</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-box-open step-icon"></i>
+              <h4>Snyk</h4>
+              <p>CVEs em Pacotes (npm)</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-check"></i> Pronto</span>
+            </div>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-step" data-stage="trivy">
+            <div class="step-header">
+              <span class="step-num">05</span>
+              <span class="step-badge">Container Scan</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-docker step-icon"></i>
+              <h4>Trivy</h4>
+              <p>Varrimento de Imagem & Dockerfile</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-check"></i> Pronto</span>
+            </div>
+          </div>
+
+          <div class="pipeline-connector"></div>
+
+          <div class="pipeline-step step-final" data-stage="deploy">
+            <div class="step-header">
+              <span class="step-num">06</span>
+              <span class="step-badge">Production</span>
+            </div>
+            <div class="step-body">
+              <i class="fa-solid fa-rocket step-icon"></i>
+              <h4>Deploy Seguro</h4>
+              <p>Aprovação do Quality Gate</p>
+            </div>
+            <div class="step-footer">
+              <span class="status-indicator ready"><i class="fa-solid fa-lock"></i> Bloqueado até Aprovação</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal Output Simulator -->
+        <div class="terminal-container" id="terminal-box">
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="terminal-title"><i class="fa-solid fa-terminal"></i> GitHub Actions Runner Console Log</div>
+            <button class="btn-sm" id="clear-log-btn"><i class="fa-solid fa-trash-can"></i> Limpar Log</button>
+          </div>
+          <div class="terminal-body" id="terminal-content">
+            <div class="log-line info">[INFO] DevSecOps Pipeline inicializado. Clique em "Simular Pipeline de Segurança" para executar o audit completo.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Deep Dive Tabs section for tools -->
+      <section class="section-card">
+        <h2><i class="fa-solid fa-layer-group"></i> Análise Detalhada das Tecnologias de Segurança</h2>
+
+        <div class="tab-buttons">
+          <button class="tab-btn active" data-tab="tab-gitleaks"><i class="fa-solid fa-key"></i> Gitleaks (Secrets)</button>
+          <button class="tab-btn" data-tab="tab-semgrep"><i class="fa-solid fa-code"></i> Semgrep (SAST)</button>
+          <button class="tab-btn" data-tab="tab-sonarqube"><i class="fa-solid fa-cubes"></i> SonarQube (Quality Gate)</button>
+          <button class="tab-btn" data-tab="tab-snyk"><i class="fa-solid fa-box-open"></i> Snyk (SCA)</button>
+          <button class="tab-btn" data-tab="tab-trivy"><i class="fa-solid fa-docker"></i> Trivy (Containers)</button>
+        </div>
+
+        <div class="tab-content-container">
+          <!-- Tab 1: Gitleaks -->
+          <div class="tab-pane active" id="tab-gitleaks">
+            <div class="tool-grid">
+              <div class="tool-desc">
+                <h3>Gitleaks: Deteção de Credenciais Expostas</h3>
+                <p>O <strong>Gitleaks</strong> realiza varrimento estático no histórico de commits do Git e no código atual para identificar tokens de API, chaves privadas SSH, credenciais AWS, tokens JWT e palavras-passe que tenham sido acidentalmente incluídas no código fonte.</p>
+                
+                <div class="feature-list">
+                  <div class="feature-item"><i class="fa-solid fa-check-double"></i> <span>Verificação de alta velocidade com entropia de Shannon.</span></div>
+                  <div class="feature-item"><i class="fa-solid fa-check-double"></i> <span>Prevenção de fuga de segredos antes do Push no GitHub.</span></div>
+                  <div class="feature-item"><i class="fa-solid fa-check-double"></i> <span>Integrado como o primeiro estágodo pipeline CI/CD.</span></div>
+                </div>
+
+                <h4>Ficheiro de Configuração (<code>.gitleaks.toml</code>):</h4>
+                <pre><code>title = "Gitleaks DevSecOps Config"
+
+[[rules]]
+id = "generic-api-key"
+description = "Deteção de API Keys no código"
+regex = '''(?i)(api[_-]?key|secret|token)\s*[:=]\s*["']([A-Za-z0-9_\-]{20,})["']'''
+tags = ["key", "secret"]</code></pre>
+              </div>
+              <div class="tool-demo-box">
+                <div class="alert alert-warning">
+                  <i class="fa-solid fa-triangle-exclamation"></i>
+                  <div>
+                    <strong>Risco Mitigado:</strong> Fuga de Credenciais no repositório público (OWASP A07:2021-Identification and Authentication Failures).
+                  </div>
+                </div>
+                <div class="code-compare">
+                  <div class="code-box unsafe">
+                    <span class="code-title"><i class="fa-solid fa-xmark"></i> Inseguro</span>
+                    <pre><code>const AWS_SECRET = "AKIAIOSFODNN7EXAMPLE";
+const dbPassword = "AdminPassword123!";</code></pre>
+                  </div>
+                  <div class="code-box safe">
+                    <span class="code-title"><i class="fa-solid fa-check"></i> Seguro (SSDLC Best Practice)</span>
+                    <pre><code>const AWS_SECRET = process.env.AWS_SECRET_KEY;
+const dbPassword = process.env.DB_PASSWORD;</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Semgrep -->
+          <div class="tab-pane" id="tab-semgrep">
+            <div class="tool-grid">
+              <div class="tool-desc">
+                <h3>Semgrep: Análise Estática de Código (SAST)</h3>
+                <p>O <strong>Semgrep</strong> é uma ferramenta ultrarrápida de análise estática (SAST) baseada em regras semânticas. Analisa a árvore de sintaxe abstrata (AST) do código para identificar antipadrões de segurança, injeções SQL, XSS, e maus usos de APIs sem a necessidade de compilar o projeto.</p>
+
+                <h4>Exemplo de Regra Semgrep (<code>.semgrep.yml</code>):</h4>
+                <pre><code>rules:
+  - id: detect-eval-usage
+    pattern: eval(...)
+    message: "Uso inseguro da função eval() detetado! Risco de RCE."
+    severity: ERROR</code></pre>
+              </div>
+              <div class="tool-demo-box">
+                <div class="alert alert-info">
+                  <i class="fa-solid fa-shield-cat"></i>
+                  <div>
+                    <strong>Integração GitHub Security:</strong> O Semgrep gera relatórios no formato estandardizado <code>.sarif</code>, permitindo visualizar os achados diretamente no tab "Security" do repositório GitHub.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: SonarQube -->
+          <div class="tab-pane" id="tab-sonarqube">
+            <div class="tool-grid">
+              <div class="tool-desc">
+                <h3>SonarQube: Quality Gate & Security Hotspots</h3>
+                <p>O <strong>SonarQube</strong> combina análise de qualidade de código (Code Smells, Duplicações, Cobertura de Testes) com análise avançada de segurança (Security Vulnerabilities & Security Hotspots). No GitHub Actions, ele aplica o **Quality Gate**: se a aplicação contiver vulnerabilidades críticas, o pipeline é interrompido imediatamente.</p>
+              </div>
+              <div class="tool-demo-box">
+                <div class="metric-list">
+                  <div class="metric-card">
+                    <span class="metric-title">Reliability</span>
+                    <span class="metric-value grade-a">A</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-title">Security Rating</span>
+                    <span class="metric-value grade-a">A</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-title">Maintainability</span>
+                    <span class="metric-value grade-a">A</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-title">Security Hotspots</span>
+                    <span class="metric-value status-clean">0 Review Needed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: Snyk -->
+          <div class="tab-pane" id="tab-snyk">
+            <div class="tool-grid">
+              <div class="tool-desc">
+                <h3>Snyk: Software Composition Analysis (SCA)</h3>
+                <p>A maior parte do código de uma aplicação moderna provém de bibliotecas e pacotes de terceiros (npm, pip, maven). O <strong>Snyk</strong> realiza a análise de composição de software (SCA), confrontando as dependências do <code>package.json</code> / <code>package-lock.json</code> com uma vasta base de dados de CVEs conhecidas.</p>
+              </div>
+              <div class="tool-demo-box">
+                <div class="sca-summary">
+                  <h4>Vantagens do Snyk no Pipeline CI/CD:</h4>
+                  <ul>
+                    <li>Deteção de vulnerabilidades diretas e transitivas.</li>
+                    <li>Recomendação automática de atualizações de versão de pacotes (Auto PRs).</li>
+                    <li>Bloqueio de dependências com licenças incompatíveis ou maliciosas.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 5: Trivy -->
+          <div class="tab-pane" id="tab-trivy">
+            <div class="tool-grid">
+              <div class="tool-desc">
+                <h3>Trivy: Varrimento e Hardening de Imagens de Containers</h3>
+                <p>O <strong>Trivy</strong> (Aqua Security) é um scanner completo para containers Docker, sistemas de ficheiros e ficheiros de infraestrutura como código (IaC). Ele identifica CVEs no sistema operativo do container (ex: Alpine, Debian) e valida boas práticas de hardening no <code>Dockerfile</code>.</p>
+              </div>
+              <div class="tool-demo-box">
+                <div class="container-checks">
+                  <div class="check-item"><i class="fa-solid fa-circle-check"></i> <span>Imagem Base Leve: <code>node:20-alpine</code></span></div>
+                  <div class="check-item"><i class="fa-solid fa-circle-check"></i> <span>Non-Root User: <code>USER node</code></span></div>
+                  <div class="check-item"><i class="fa-solid fa-circle-check"></i> <span>Multi-Stage Build (Separação de Builder e Runner)</span></div>
+                  <div class="check-item"><i class="fa-solid fa-circle-check"></i> <span>Limpeza de pacotes e cache do SO</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SSDLC Best Practices & Flow Summary -->
+      <section class="section-card">
+        <h2><i class="fa-solid fa-arrows-spin"></i> O Ciclo de Vida Seguro do Software (SSDLC)</h2>
+        <div class="ssdlc-grid">
+          <div class="ssdlc-phase">
+            <div class="phase-icon"><i class="fa-solid fa-pen-ruler"></i></div>
+            <h3>1. Requisitos & Design</h3>
+            <p>Modelação de Ameaças (Threat Modeling) e definição dos requisitos de segurança.</p>
+          </div>
+          <div class="ssdlc-phase">
+            <div class="phase-icon"><i class="fa-solid fa-code-commit"></i></div>
+            <h3>2. Desenvolvimento</h3>
+            <p>Codificação segura, linters e deteção de credenciais via Gitleaks no pre-commit.</p>
+          </div>
+          <div class="ssdlc-phase">
+            <div class="phase-icon"><i class="fa-solid fa-network-wired"></i></div>
+            <h3>3. CI/CD Integration</h3>
+            <p>Testes estáticos (Semgrep + SonarQube) e análise de dependências (SCA Snyk) no GitHub Actions.</p>
+          </div>
+          <div class="ssdlc-phase">
+            <div class="phase-icon"><i class="fa-solid fa-box"></i></div>
+            <h3>4. Empacotamento</h3>
+            <p>Hardening e varrimento de vulnerabilidades em containers com Trivy.</p>
+          </div>
+          <div class="ssdlc-phase">
+            <div class="phase-icon"><i class="fa-solid fa-server"></i></div>
+            <h3>5. Produção & Monitorização</h3>
+            <p>Deploy seguro condicionado pela aprovação rigorosa nos Quality Gates.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>DevSecOps & SSDLC Demonstration Project &bull; GitHub Actions CI/CD Security Integration</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
