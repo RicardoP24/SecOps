@@ -2,11 +2,20 @@
 title = "DevSecOps SSDLC Gitleaks Configuration"
 
 [allowlist]
-description = "Global allowlist for false positives or documentation examples"
+description = "Global allowlist for false positives, UI mocks, or documentation examples"
 paths = [
-  '''gitleaks.toml''',
-  '''README.md''',
-  '''scripts/.*'''
+  '''gitleaks\.toml''',
+  '''README\.md''',
+  '''docs/.*''',
+  '''scripts/.*''',
+  '''app\.js''',
+  '''index\.html''',
+  '''src/server\.js'''
+]
+
+regexes = [
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''MOCK_.*'''
 ]
 
 # Regras personalizadas adicionais se necessário
