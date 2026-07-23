@@ -8,6 +8,12 @@ Este repositório é uma solução completa e de referência prática para a imp
 
 O conceito de **DevSecOps** consiste na integração da segurança em todas as fases do ciclo de desenvolvimento, em vez de tratá-la como um controlo final isolado. A abordagem **"Shift-Left"** move os testes de segurança para o início da pipeline (no commit e na Pull Request), permitindo identificar e corrigir falhas de segurança mais cedo, com um custo drasticamente inferior.
 
+### 📚 Guias e Estudos de Caso
+- 📘 [Explicação Detalhada do Pipeline YAML](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/docs/PIPELINE_EXPLANATION.md)
+- 🎭 [Laboratório Prático Multi-Utilizador (Alice & Bob)](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/docs/LAB_MULTIUSER_WORKFLOW.md)
+- 🛡️ [Estudo de Caso: GitHub Push Protection & Git Reset](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/docs/PUSH_PROTECTION_CASE_STUDY.md)
+- 🛠️ [Guia Completo de Troubleshooting DevSecOps & GitHub Actions](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/docs/TROUBLESHOOTING.md)
+
 ```mermaid
 flowchart LR
     A[Code & Commit] -->|Secret Scan| B(Gitleaks)

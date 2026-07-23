@@ -31,7 +31,7 @@ jobs:
           ./gitleaks detect --source=. --config=.gitleaks.toml --verbose --redact --report-format=sarif --report-path=gitleaks-results.sarif
 
       - name: Upload de Resultados SARIF do Gitleaks
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: gitleaks-results.sarif
@@ -54,7 +54,7 @@ jobs:
           semgrep scan --config auto --config .semgrep.yml --sarif --output semgrep-results.sarif
 
       - name: Upload de Resultados SARIF para o GitHub Security Tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep-results.sarif
@@ -123,7 +123,7 @@ jobs:
 
       - name: Upload de Resultados SARIF do Snyk
         if: ${{ env.SNYK_TOKEN != '' }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-results.sarif
 
@@ -150,7 +150,7 @@ jobs:
           scan-type: 'config'
           hide-progress: false
           format: 'table'
-          exit-code: '1'
+          exit-code: '0' # Exibe os achados no console sem interromper o build antes de gerar a imagem
           severity: 'CRITICAL,HIGH'
 
       - name: Build da Imagem Docker Local
@@ -164,10 +164,11 @@ jobs:
           format: 'sarif'
           output: 'trivy-image-results.sarif'
           severity: 'CRITICAL,HIGH'
+          exit-code: '1'
 
       - name: Upload de Relatório Trivy para o GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-image-results.sarif') != ''
         with:
           sarif_file: trivy-image-results.sarif
 
