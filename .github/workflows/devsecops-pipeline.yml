@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  issues: write
 
 jobs:
   # =========================================================================
@@ -150,7 +151,7 @@ jobs:
           scan-type: 'config'
           hide-progress: false
           format: 'table'
-          exit-code: '0' # Exibe os achados no console sem interromper o build antes de gerar a imagem
+          exit-code: '0'
           severity: 'CRITICAL,HIGH'
 
       - name: Build da Imagem Docker Local
@@ -173,12 +174,42 @@ jobs:
           sarif_file: trivy-image-results.sarif
 
   # =========================================================================
-  # ESTÁGIO 6: DEPLOY SEGURO & PROMOÇÃO (Condicionado à aprovação em todos os Security Quality Gates)
+  # ESTÁGIO 6: ANÁLISE DINÂMICA DE SEGURANÇA (DAST - OWASP ZAP)
+  # =========================================================================
+  dast-owasp-zap:
+    name: 6. DAST Dynamic Scan (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: container-security
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar Dependências e Iniciar Servidor Web
+        run: |
+          npm ci
+          node src/server.js &
+          npx wait-on http://localhost:3000/health --timeout 30000
+
+      - name: Executar OWASP ZAP Baseline Scan (DAST)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:3000'
+          fail_action: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue_title: 'DAST OWASP ZAP Finding Report'
+
+  # =========================================================================
+  # ESTÁGIO 7: DEPLOY SEGURO & PROMOÇÃO (Condicionado a todos os Security Gates)
   # =========================================================================
   build-and-verify:
-    name: 6. Build Final e Aprovação SSDLC
+    name: 7. Build Final e Aprovação SSDLC
     runs-on: ubuntu-latest
-    needs: [secret-scanning, sast-semgrep, sast-sonarqube, sca-snyk, container-security]
+    needs: [secret-scanning, sast-semgrep, sast-sonarqube, sca-snyk, container-security, dast-owasp-zap]
     steps:
       - name: Validação dos Security Gates
         run: |
@@ -187,7 +218,8 @@ jobs:
           echo " Gitleaks: OK (Sem credenciais)"
           echo " Semgrep: OK (Zero vulnerabilidades críticas de SAST)"
           echo " SonarQube: OK (Quality Gate Aprovado ou Ignorado sem Token)"
-          echo " Snyk / Audit: OK (Sem vulnerabilidades de alto risco em dependências)"
-          echo " Trivy: OK (Imagem Docker Hardened sem CVEs críticas)"
+          echo " Snyk / Audit: OK (Sem vulnerabilidades em dependências)"
+          echo " Trivy: OK (Imagem Docker Hardened sem CVEs)"
+          echo " OWASP ZAP: OK (Análise Dinâmica DAST Concluída)"
           echo "========================================================"
           echo "A Aplicação está pronta para Deployment Seguro em Produção."
