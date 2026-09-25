@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Script de Configuração de Repositório Git & Workflow Multi-Utilizador (DevSecOps Lab)
 # Simula a colaboração de 2 Desenvolvedores (Alice e Bob) com ramos e validação no CI/CD
 # ==============================================================================

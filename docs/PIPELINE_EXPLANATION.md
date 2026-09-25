@@ -1,32 +1,36 @@
 # Explicação Detalhada do Pipeline DevSecOps no GitHub Actions
 
-Ficheiro analisado: [devsecops-pipeline.yml](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/.github/workflows/devsecops-pipeline.yml)
+Ficheiro analisado: [`.github/workflows/devsecops-pipeline.yml`](../.github/workflows/devsecops-pipeline.yml)
 
 ---
 
-## 📑 Secções do Pipeline CI/CD
+## Princípios aplicados a todo o pipeline
 
-### 1. Metadados e Permissões
-- Configura permissões estritas `contents: read`, `security-events: write` e `issues: write` para publicar relatórios SARIF na aba **Security** e criar alertas de DAST.
+- **Menor privilégio:** o workflow tem `contents: read` por omissão; cada job pede apenas as permissões de que precisa (`security-events: write` para SARIF, `packages: write` e `id-token: write` só na publicação).
+- **Actions fixadas por SHA:** tags como `@v4` ou `@master` são mutáveis e já foram usadas em ataques de supply chain. Todas as actions usam o SHA completo do commit, com a versão em comentário.
+- **Ferramentas com versão fixa:** Gitleaks (com verificação SHA-256), imagem do Semgrep por digest, Trivy e Snyk com versão explícita.
+- **Gates reais:** cada stage de segurança falha o job quando encontra problemas; os jobs seguintes não correm.
+- `persist-credentials: false` no checkout: o token do GitHub não fica gravado no `.git` do runner.
 
-### 2. Estágio 1: Gitleaks (Secret Scanning)
-- Baixa o binário oficial do Gitleaks e analisa todas as variáveis e ficheiros à procura de credenciais expostas.
+## Stages
 
-### 3. Estágio 2: Semgrep (SAST)
-- Utiliza a imagem Docker oficial do Semgrep para aplicar as regras de [.semgrep.yml](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/.semgrep.yml) e detetar antipadrões do OWASP Top 10.
+| # | Job | O que faz | Bloqueia quando |
+|---|---|---|---|
+| 1 | Secret Scanning (Gitleaks) | Analisa **todo o histórico git** com as regras por omissão do Gitleaks + regras do projeto ([`.gitleaks.toml`](../.gitleaks.toml)) | qualquer segredo |
+| 2 | Unit Tests | `npm test` (node:test): API, cabeçalhos do Helmet, CORS, rate limiting, ficheiros não expostos | teste falhado |
+| 3 | SAST (Semgrep) | Regras JavaScript, Node.js, OWASP Top 10, Dockerfile e GitHub Actions + regras próprias ([`.semgrep.yml`](../.semgrep.yml)) | achados `ERROR`/`WARNING` (`INFO` só é reportado) |
+| 4 | SAST & Quality Gate (SonarQube) | Corre se `SONAR_TOKEN` estiver configurado; `sonar.qualitygate.wait=true` faz o passo esperar pelo Quality Gate | Quality Gate falhado |
+| 5 | SCA (Snyk / npm audit) | Snyk com `SNYK_TOKEN`; sem token, `npm audit` das dependências de produção | vulnerabilidade HIGH/CRITICAL |
+| 6 | Container Security (Trivy) | Scan de configuração do Dockerfile e scan da imagem construída | má configuração HIGH/CRITICAL; CVE HIGH/CRITICAL **com correção disponível** |
+| 7 | DAST (OWASP ZAP) | Arranca **o container** (com `--read-only`) e corre o ZAP baseline contra ele | regras marcadas `FAIL` em [`.zap/rules.tsv`](../.zap/rules.tsv) |
+| 8 | Publish Signed Image | Só em `main`: imagem no GHCR com SBOM e proveniência SLSA, assinada com **cosign keyless** (OIDC do GitHub) e verificada | falha na assinatura ou verificação |
 
-### 4. Estágio 3: SonarQube (Quality Gate)
-- Submete o projeto para o SonarQube caso o `SONAR_TOKEN` esteja configurado nos Secrets do GitHub.
+Os resultados em SARIF (Gitleaks, Semgrep, Snyk, Trivy) ficam no separador **Security → Code scanning** do repositório.
 
-### 5. Estágio 4: Snyk (SCA)
-- Instala as dependências do `package.json` com `npm ci` e analisa vulnerabilidades em bibliotecas de terceiros (SCA). Executa o `npm audit` nativo caso o `SNYK_TOKEN` não esteja configurado.
+## Verificar a imagem publicada
 
-### 6. Estágio 5: Trivy (Containers & Hardening)
-- Analisa a estrutura do [Dockerfile](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/Dockerfile) (IaC Config Scan) e faz o varrimento da imagem Docker compilada (`node:20-alpine`) contra CVEs conhecidas.
-
-### 7. Estágio 6: OWASP ZAP (DAST Dynamic Scan)
-- Arranca a aplicação Node.js localmente (`node src/server.js`) na porta 3000.
-- Executa a ferramenta **OWASP ZAP (`zaproxy/action-baseline@v0.14.0`)** para simular ataques HTTP dinâmicos contra os endpoints da API ativa (`http://localhost:3000`).
-
-### 8. Estágio 7: Deploy Seguro e Promoção SSDLC
-- Exige aprovação de **todos os 6 estágios anteriores** antes de autorizar a promoção do software para produção.
+```bash
+cosign verify ghcr.io/ricardop24/secops:latest \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/RicardoP24/SecOps/'
+```

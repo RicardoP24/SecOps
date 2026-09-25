@@ -14,6 +14,9 @@ Este documento compila todos os problemas, erros reais de pipeline e soluções 
 6. [Trivy: Erro `Path does not exist: trivy-image-results.sarif`](#6-trivy-erro-path-does-not-exist-trivy-image-results-sarif)
 7. [Deprecation Warning: Upgrade do `codeql-action/upload-sarif` de `@v3` para `@v4`](#7-deprecation-warning-upgrade-do-codeql-actionupload-sarif-de-v3-para-v4)
 8. [Git: Erro `(non-fast-forward)` no Push de Branch de Teste](#8-git-erro-non-fast-forward-no-push-de-branch-de-teste)
+9. [Revisão de hardening do pipeline (setembro 2026)](#9-revisão-de-hardening-do-pipeline-setembro-2026)
+
+> As secções 1 a 8 descrevem o pipeline na altura em que cada problema ocorreu. A secção 9 explica o que mudou depois e porquê.
 
 ---
 
@@ -90,7 +93,7 @@ Error: Process completed with exit code 1.
 O Gitleaks varreu os ficheiros de demonstração da interface gráfica (`index.html`, `app.js`, `src/server.js`) que continham exemplos didáticos de chaves de demonstração.
 
 ### 🛠️ Solução Aplicada:
-Atualização do ficheiro [.gitleaks.toml](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/.gitleaks.toml) incluindo ficheiros de UI na `paths` allowlist e adicionando padronizações de demonstração em `regexes`:
+Atualização do ficheiro [.gitleaks.toml](../.gitleaks.toml) incluindo ficheiros de UI na `paths` allowlist e adicionando padronizações de demonstração em `regexes`:
 ```toml
 [allowlist]
 paths = [
@@ -212,3 +215,23 @@ Forçar a atualização da branch de testes remota com a flag `--force`:
 ```powershell
 git push -u origin test --force
 ```
+
+---
+
+## 9. Revisão de hardening do pipeline (setembro 2026)
+
+Uma revisão ao repositório mostrou que alguns gates **não bloqueavam** e que algumas soluções rápidas tinham enfraquecido a segurança. O que foi corrigido:
+
+| Problema | Risco | Correção |
+|---|---|---|
+| `node_modules/` versionado (982 dos 1001 ficheiros) | ruído, dependências fora do lockfile | removido do git; `npm ci` reconstrói a partir do `package-lock.json` |
+| Snyk com `continue-on-error: true`; `npm audit \|\| true` | vulnerabilidades HIGH não bloqueavam | Snyk e `npm audit --audit-level=high` são gates |
+| Semgrep sem `--error` | achados nunca falhavam o job | gate sobre achados `ERROR`/`WARNING` no SARIF |
+| Trivy config com `exit-code: '0'` (secção 6) | más configurações do Dockerfile só geravam avisos | `exit-code: '1'`; o SARIF da imagem é gerado num passo próprio |
+| Actions em `@master` / tags mutáveis | supply chain (ex.: tj-actions/changed-files, 2025) | todas as actions fixadas por SHA de commit |
+| `.gitleaks.toml` com regras próprias sem `[extend] useDefault = true` | as regras por omissão do Gitleaks estavam desligadas | regras por omissão ativas + regras do projeto |
+| Allowlist por caminho a `src/server.js`, `app.js`, `index.html`, `docs/` (secção 4) | segredos reais nesses ficheiros passariam | só a chave de exemplo exata da AWS (`^AKIAIOSFODNN7EXAMPLE$`), o gerador do laboratório e um commit histórico por fingerprint (`.gitleaksignore`) |
+| `express.static` a servir a raiz do projeto | `/package.json` e `/src/server.js` acessíveis por HTTP | só `public/` é servida; há um teste que o garante |
+| CORS `origin: '*'` descrito como "estrito" | qualquer site podia ler a API | sem origens externas por omissão; lista explícita via `CORS_ORIGINS` |
+| `node:20-alpine` (fim de vida em abril de 2026) com npm na imagem final | 24 CVEs HIGH corrigíveis na imagem base | `node:24` fixado por digest; npm/yarn/corepack removidos da imagem final |
+| Job final só com `echo` | nada era entregue | publicação no GHCR com SBOM, proveniência SLSA e assinatura cosign keyless |
