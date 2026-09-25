@@ -1,0 +1,2 @@
+# Historical lab commit (PR #1): intentionally fake Stripe key in a test file that no longer exists.
+d49378f48bc94faa2390c4256dad9a102dffad3f:src/vulnerable.php:generic-api-key-strict:8

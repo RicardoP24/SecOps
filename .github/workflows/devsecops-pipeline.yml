@@ -2,224 +2,324 @@ name: DevSecOps SSDLC Pipeline
 
 on:
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: ["main"]
   workflow_dispatch:
 
+# Least privilege: read-only by default, each job asks only for what it needs.
 permissions:
   contents: read
-  security-events: write
-  issues: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every action is pinned to a full commit SHA (tags are mutable; see tj-actions/changed-files, 2025).
 jobs:
   # =========================================================================
-  # ESTÁGIO 1: DETEÇÃO ATIVA DE CREDENCIAIS EXPOSTAS (Secret Scanning - Gitleaks)
+  # 1. SECRET SCANNING (Gitleaks) - full git history
   # =========================================================================
   secret-scanning:
     name: 1. Secret Scanning (Gitleaks)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GITLEAKS_VERSION: 8.30.1
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Instalar e Executar Gitleaks Scan
+      - name: Install Gitleaks (checksum verified)
         run: |
-          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
-          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
-          ./gitleaks detect --source=. --config=.gitleaks.toml --verbose --redact --report-format=sarif --report-path=gitleaks-results.sarif
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${file}"
+          curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${file}\$" | sha256sum -c -
+          tar -xzf "${file}" gitleaks
 
-      - name: Upload de Resultados SARIF do Gitleaks
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
+      - name: Scan git history (blocks on any secret)
+        run: ./gitleaks git --no-banner --redact --config .gitleaks.toml --report-format sarif --report-path gitleaks.sarif .
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          sarif_file: gitleaks-results.sarif
+          sarif_file: gitleaks.sarif
+          category: gitleaks
 
   # =========================================================================
-  # ESTÁGIO 2: ANÁLISE ESTÁTICA DE CÓDIGO (SAST - Semgrep)
+  # 2. UNIT TESTS (node:test)
   # =========================================================================
-  sast-semgrep:
-    name: 2. SAST Lightweight (Semgrep)
+  unit-tests:
+    name: 2. Unit Tests
     runs-on: ubuntu-latest
     needs: secret-scanning
-    container:
-      image: semgrep/semgrep:latest
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
-
-      - name: Executar Semgrep Scan (Ruleset OWASP Top 10)
-        run: |
-          semgrep scan --config auto --config .semgrep.yml --sarif --output semgrep-results.sarif
-
-      - name: Upload de Resultados SARIF para o GitHub Security Tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sarif_file: semgrep-results.sarif
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: npm test
 
   # =========================================================================
-  # ESTÁGIO 3: ANÁLISE ESTÁTICA & CODE QUALITY (SAST - SonarQube)
+  # 3. SAST (Semgrep) - blocks on ERROR/WARNING findings
+  # =========================================================================
+  sast-semgrep:
+    name: 3. SAST (Semgrep)
+    runs-on: ubuntu-latest
+    needs: secret-scanning
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Semgrep scan (JavaScript, Node.js, OWASP Top 10, Dockerfile, GitHub Actions + custom rules)
+        run: |
+          semgrep scan --metrics=off \
+            --config p/javascript --config p/nodejsscan --config p/owasp-top-ten \
+            --config p/dockerfile --config p/github-actions --config .semgrep.yml \
+            --sarif --output semgrep.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Security gate (fail on ERROR/WARNING, INFO is reported only)
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          results = [r for run in json.load(open("semgrep.sarif"))["runs"] for r in run["results"]]
+          blocking = [r for r in results if r.get("level") in ("error", "warning")]
+          for r in blocking:
+              loc = r["locations"][0]["physicalLocation"]
+              print(f'{r["level"].upper()}: {r["ruleId"]} at {loc["artifactLocation"]["uri"]}:{loc["region"]["startLine"]}')
+          print(f"Semgrep: {len(results)} finding(s), {len(blocking)} blocking")
+          sys.exit(1 if blocking else 0)
+          EOF
+
+  # =========================================================================
+  # 4. SAST & QUALITY GATE (SonarQube) - runs when SONAR_TOKEN is configured
   # =========================================================================
   sast-sonarqube:
-    name: 3. SAST & Quality Gate (SonarQube)
+    name: 4. SAST & Quality Gate (SonarQube)
     runs-on: ubuntu-latest
     needs: secret-scanning
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Executar SonarQube Scanner (Se SONAR_TOKEN estiver configurado)
+      # sonar.qualitygate.wait=true (sonar-project.properties) makes this step fail when the gate fails.
+      - name: SonarQube scan + Quality Gate
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-scan-action@v2.0.2
-        with:
-          args: >
-            -Dsonar.projectKey=ci-cd-sec-devsecops
-            -Dsonar.sources=src
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
 
-      - name: Validação do SonarQube Quality Gate
-        if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
-        timeout-minutes: 5
-
-      - name: Notificação SonarQube Ignorado (Sem Token)
+      - name: SonarQube skipped (no token)
         if: ${{ env.SONAR_TOKEN == '' }}
-        run: |
-          echo "[INFO] SONAR_TOKEN não configurado nos GitHub Secrets. O estágio SonarQube foi ignorado com sucesso."
+        run: echo "::notice title=SonarQube::SONAR_TOKEN is not configured, stage skipped."
 
   # =========================================================================
-  # ESTÁGIO 4: ANÁLISE DE DEPENDÊNCIAS (SCA - Snyk Open Source)
+  # 5. SCA (Snyk, or npm audit without a Snyk token) - blocks on HIGH/CRITICAL
   # =========================================================================
-  sca-snyk:
-    name: 4. SCA Dependency Scanning (Snyk)
+  sca:
+    name: 5. SCA Dependency Scanning (Snyk / npm audit)
     runs-on: ubuntu-latest
     needs: secret-scanning
+    permissions:
+      contents: read
+      security-events: write
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '20'
+          persist-credentials: false
 
-      - name: Instalar Dependências
-        run: npm ci
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
 
-      - name: Executar Snyk para Deteção de Vulnerabilidades em Pacotes
+      - run: npm ci --ignore-scripts
+
+      - name: Snyk test (blocks on HIGH/CRITICAL)
         if: ${{ env.SNYK_TOKEN != '' }}
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        with:
-          args: --sarif-file-output=snyk-results.sarif --severity-threshold=high
+        run: npx --yes snyk@1.1307.4 test --severity-threshold=high --sarif-file-output=snyk.sarif
 
-      - name: Upload de Resultados SARIF do Snyk
-        if: ${{ env.SNYK_TOKEN != '' }}
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('snyk.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          sarif_file: snyk-results.sarif
+          sarif_file: snyk.sarif
+          category: snyk
 
-      - name: Executar npm audit alternativo (Sem SNYK_TOKEN)
+      - name: npm audit (blocks on HIGH/CRITICAL, used when no Snyk token)
         if: ${{ env.SNYK_TOKEN == '' }}
-        run: |
-          echo "[INFO] SNYK_TOKEN não configurado. Executando npm audit nativo..."
-          npm audit || true
+        run: npm audit --omit=dev --audit-level=high
 
   # =========================================================================
-  # ESTÁGIO 5: VARRIMENTO & HARDENING DE CONTAINERS (Trivy)
+  # 6. CONTAINER SECURITY (Trivy) - Dockerfile misconfigurations + image CVEs
   # =========================================================================
   container-security:
-    name: 5. Container & IaC Security (Trivy)
+    name: 6. Container Security (Trivy)
     runs-on: ubuntu-latest
-    needs: [sast-semgrep, sca-snyk]
+    needs: [unit-tests, sast-semgrep, sast-sonarqube, sca]
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      IMAGE: secops-app:${{ github.sha }}
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
-
-      - name: Varrimento Trivy no Sistema de Ficheiros e Dockerfile (IaC Config Scan)
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          scan-type: 'config'
-          hide-progress: false
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
+          persist-credentials: false
 
-      - name: Build da Imagem Docker Local
-        run: |
-          docker build -t devsecops-app:${{ github.sha }} .
-
-      - name: Varrimento Trivy na Imagem Docker Gerada (CVE Check)
-        uses: aquasecurity/trivy-action@master
+      - name: Dockerfile misconfigurations (blocks on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: 'devsecops-app:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-image-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          version: v0.74.0
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
 
-      - name: Upload de Relatório Trivy para o GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-image-results.sarif') != ''
+      - name: Build image
+        run: docker build --tag "$IMAGE" .
+
+      - name: Image vulnerabilities report (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          sarif_file: trivy-image-results.sarif
+          version: v0.74.0
+          image-ref: ${{ env.IMAGE }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+          limit-severities-for-sarif: true
+          exit-code: "0"
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('trivy-image.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Image gate (blocks on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: ${{ env.IMAGE }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
 
   # =========================================================================
-  # ESTÁGIO 6: ANÁLISE DINÂMICA DE SEGURANÇA (DAST - OWASP ZAP)
+  # 7. DAST (OWASP ZAP baseline) against the container that would ship
   # =========================================================================
-  dast-owasp-zap:
-    name: 6. DAST Dynamic Scan (OWASP ZAP)
+  dast:
+    name: 7. DAST (OWASP ZAP)
     runs-on: ubuntu-latest
     needs: container-security
     steps:
-      - name: Checkout do Repositório
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '20'
+          persist-credentials: false
 
-      - name: Instalar Dependências e Iniciar Servidor Web
+      - name: Build and start the container
         run: |
-          npm ci
-          node src/server.js &
-          npx wait-on http://localhost:3000/health --timeout 30000
+          docker build --tag secops-app:dast .
+          docker run --detach --name app --publish 3000:3000 --read-only secops-app:dast
+          for i in $(seq 1 30); do curl -fsS http://localhost:3000/health && exit 0; sleep 2; done
+          docker logs app; exit 1
 
-      - name: Executar OWASP ZAP Baseline Scan (DAST)
-        uses: zaproxy/action-baseline@v0.14.0
+      # Rules marked FAIL in .zap/rules.tsv break the build; WARN is reported only (-I).
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: 'http://localhost:3000'
-          fail_action: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          issue_title: 'DAST OWASP ZAP Finding Report'
+          target: http://localhost:3000
+          rules_file_name: .zap/rules.tsv
+          cmd_options: -I
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-report
 
   # =========================================================================
-  # ESTÁGIO 7: DEPLOY SEGURO & PROMOÇÃO (Condicionado a todos os Security Gates)
+  # 8. PUBLISH (main only): push to GHCR with SBOM + provenance, keyless cosign signature
   # =========================================================================
-  build-and-verify:
-    name: 7. Build Final e Aprovação SSDLC
+  publish:
+    name: 8. Publish Signed Image (GHCR)
     runs-on: ubuntu-latest
-    needs: [secret-scanning, sast-semgrep, sast-sonarqube, sca-snyk, container-security, dast-owasp-zap]
+    needs: dast
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # GitHub OIDC token for keyless signing (Sigstore)
     steps:
-      - name: Validação dos Security Gates
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image name (lowercase)
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (SBOM + SLSA provenance attestations)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign by digest (keyless) and verify
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
         run: |
-          echo "========================================================"
-          echo " TODOS OS SECURITY QUALITY GATES FORAM APROVADOS!"
-          echo " Gitleaks: OK (Sem credenciais)"
-          echo " Semgrep: OK (Zero vulnerabilidades críticas de SAST)"
-          echo " SonarQube: OK (Quality Gate Aprovado ou Ignorado sem Token)"
-          echo " Snyk / Audit: OK (Sem vulnerabilidades em dependências)"
-          echo " Trivy: OK (Imagem Docker Hardened sem CVEs)"
-          echo " OWASP ZAP: OK (Análise Dinâmica DAST Concluída)"
-          echo "========================================================"
-          echo "A Aplicação está pronta para Deployment Seguro em Produção."
+          cosign sign --yes "$IMAGE"
+          cosign verify "$IMAGE" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/"
