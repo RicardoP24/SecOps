@@ -15,37 +15,49 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 1. Hardening de Cabeçalhos HTTP com Helmet (SAST & OWASP Compliance)
+//    Scripts apenas da própria origem (sem 'unsafe-inline'): o dashboard usa só public/app.js.
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-      imgSrc: ["'self'", "data:", "https:"]
+      imgSrc: ["'self'", "data:", "https:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"]
     }
   }
 }));
 
-// 2. Configuração Estrita de CORS
+// 2. CORS restritivo: por omissão nenhuma origem externa é autorizada (o dashboard é servido
+//    pela mesma origem). Origens extra só por configuração explícita: CORS_ORIGINS=https://a,https://b
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
+  methods: ['GET'],
+  allowedHeaders: ['Content-Type']
 }));
 
 // 3. Limitação de Taxa de Requisições (Rate Limiting)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 150,
+  limit: 150,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
   message: { status: 429, error: 'Muitos pedidos enviados. Tente novamente mais tarde.' }
 });
 
 app.use(limiter);
 app.use(express.json({ limit: '10kb' }));
 
-// Servir os ficheiros estáticos do Dashboard Web
-app.use(express.static(path.join(__dirname, '..')));
+// Servir APENAS a pasta public/ (nunca a raiz do projeto: package.json, src/ e node_modules
+// ficariam acessíveis por HTTP).
+app.use(express.static(path.join(__dirname, '..', 'public'), { dotfiles: 'deny', index: 'index.html' }));
 
 // =========================================================================
 // MOCK DATA: EQUIPA DE DESENVOLVIMENTO & PROJETO SSDLC
@@ -220,7 +232,13 @@ app.get('/api/v1/security/status', (req, res) => {
   });
 });
 
-// Tratador Global de Erros
+// Rotas inexistentes: 404 em JSON, sem expor detalhes do framework
+app.use((req, res) => {
+  res.status(404).json({ error: 'Recurso não encontrado.', code: 'NOT_FOUND' });
+});
+
+// Tratador Global de Erros (a assinatura com 4 argumentos é exigida pelo Express)
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[SERVER ERROR]', err.message);
   res.status(500).json({ error: 'Erro interno no servidor.', code: 'INTERNAL_SERVER_ERROR' });
