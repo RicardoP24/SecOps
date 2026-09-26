@@ -33,12 +33,12 @@ O script irá criar as branches `feature/alice-secure-auth` e `feature/bob-insec
 
 ## 🌐 Passo 2: Publicar no GitHub
 
-1. Crie um novo repositório vazio no seu GitHub com o nome **`ci-cd-sec`**.
+1. Crie um novo repositório vazio no seu GitHub com o nome **`SecOps`**.
 2. Adicione o repositório remoto e faça o push de todas as branches:
 
 ```bash
 # Conectar ao seu repositório no GitHub
-git remote add origin https://github.com/SEU-UTILIZADOR/ci-cd-sec.git
+git remote add origin https://github.com/SEU-UTILIZADOR/SecOps.git
 
 # Enviar a branch principal
 git push -u origin main
@@ -56,11 +56,11 @@ git push -u origin feature/bob-insecure-feature
 1. No GitHub, abra uma **Pull Request** de `feature/alice-secure-auth` para `main`.
 2. Vá ao separador **Actions** ou observe as verificações na própria PR.
 3. **Resultado**:
-   - `Secret Scanning (Gitleaks)`: 🟢 Passed
-   - `SAST (Semgrep & SonarQube)`: 🟢 Passed
-   - `SCA (Snyk)`: 🟢 Passed
-   - `Container Security (Trivy)`: 🟢 Passed
-   - `Build Final`: 🟢 Aprovado para Fusão (Merge)!
+   - `1. Secret Scanning (Gitleaks)`: 🟢 Passed
+   - `2. Unit Tests` e `3. SAST (Semgrep)`: 🟢 Passed
+   - `5. SCA (Snyk / npm audit)`: 🟢 Passed
+   - `6. Container Security (Trivy)` e `7. DAST (OWASP ZAP)`: 🟢 Passed
+   - Resultado: 🟢 aprovado para fusão (merge).
 
 ---
 
@@ -68,9 +68,9 @@ git push -u origin feature/bob-insecure-feature
 1. Abra uma **Pull Request** de `feature/bob-insecure-feature` para `main`.
 2. Observe o GitHub Actions interromper a pipeline.
 3. **Resultado**:
-   - `Gitleaks`: 🔴 **FALHOU** (Detetou a chave `AWS_SECRET_KEY` no ficheiro `src/legacy-processor.js`).
-   - `Semgrep`: 🔴 **FALHOU** (Detetou o uso inseguro de `eval()` no mesmo ficheiro).
-   - `Build Final`: ❌ **BLOQUEADO**. O botão de Merge fica desativado!
+   - `1. Secret Scanning (Gitleaks)`: 🔴 **FALHOU** (detetou a chave em `AWS_SECRET_KEY` no ficheiro `src/legacy-processor.js`).
+   - Os jobs seguintes não chegam a correr: com a proteção de branch abaixo, o botão de merge fica desativado.
+   - Depois de remover a chave, o `3. SAST (Semgrep)` 🔴 **FALHA** com o uso inseguro de `eval()` no mesmo ficheiro.
 
 ---
 
@@ -80,4 +80,4 @@ Para forçar que o código só possa ser fundido se passar na pipeline de segura
 1. Vá a **Settings > Branches** no repositório GitHub.
 2. Adicione uma regra de proteção para a branch `main`.
 3. Ative a opção: **"Require status checks to pass before merging"**.
-4. Selecione os estagios: `1. Secret Scanning (Gitleaks)`, `2. SAST Lightweight (Semgrep)`, `3. SAST & Quality Gate (SonarQube)`, `4. SCA Dependency Scanning (Snyk)`, `5. Container & IaC Security (Trivy)`.
+4. Selecione os estágios: `1. Secret Scanning (Gitleaks)`, `2. Unit Tests`, `3. SAST (Semgrep)`, `4. SAST & Quality Gate (SonarQube)`, `5. SCA Dependency Scanning (Snyk / npm audit)`, `6. Container Security (Trivy)` e `7. DAST (OWASP ZAP)`.

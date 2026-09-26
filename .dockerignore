@@ -1,9 +1,6 @@
-node_modules
-npm-debug.log
-.git
-.github
-.vscode
-.env
-*.md
-coverage
-scripts
+# Allowlist: only what the image needs reaches the build context.
+*
+!package.json
+!package-lock.json
+!src/
+!public/

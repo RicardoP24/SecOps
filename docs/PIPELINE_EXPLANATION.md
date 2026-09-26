@@ -1,45 +1,36 @@
 # Explicação Detalhada do Pipeline DevSecOps no GitHub Actions
 
-Ficheiro analisado: [devsecops-pipeline.yml](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/.github/workflows/devsecops-pipeline.yml)
+Ficheiro analisado: [`.github/workflows/devsecops-pipeline.yml`](../.github/workflows/devsecops-pipeline.yml)
 
 ---
 
-## 🔍 Causa do Erro do Gitleaks no Primeiro Push e Solução Aplicada
+## Princípios aplicados a todo o pipeline
 
-O erro reportado no registo do GitHub Actions:
-```text
-ERR [git] fatal: ambiguous argument '94c887...^..b32fdb...': unknown revision or path not in the working tree.
-```
-ocorreu porque a ação `gitleaks-action@v2` tenta executar `git log commit^..commit`. Num **repositório novo ou no commit inicial**, a referência `commit^` (commit anterior) **não existe**, fazendo com que o Git aborte a execução.
+- **Menor privilégio:** o workflow tem `contents: read` por omissão; cada job pede apenas as permissões de que precisa (`security-events: write` para SARIF, `packages: write` e `id-token: write` só na publicação).
+- **Actions fixadas por SHA:** tags como `@v4` ou `@master` são mutáveis e já foram usadas em ataques de supply chain. Todas as actions usam o SHA completo do commit, com a versão em comentário.
+- **Ferramentas com versão fixa:** Gitleaks (com verificação SHA-256), imagem do Semgrep por digest, Trivy e Snyk com versão explícita.
+- **Gates reais:** cada stage de segurança falha o job quando encontra problemas; os jobs seguintes não correm.
+- `persist-credentials: false` no checkout: o token do GitHub não fica gravado no `.git` do runner.
 
-### 🛠️ Correção Implementada:
-Substituímos o passo pelo download direto da versão estável do binário do **Gitleaks** e executámo-lo com o comando:
+## Stages
+
+| # | Job | O que faz | Bloqueia quando |
+|---|---|---|---|
+| 1 | Secret Scanning (Gitleaks) | Analisa **todo o histórico git** com as regras por omissão do Gitleaks + regras do projeto ([`.gitleaks.toml`](../.gitleaks.toml)) | qualquer segredo |
+| 2 | Unit Tests | `npm test` (node:test): API, cabeçalhos do Helmet, CORS, rate limiting, ficheiros não expostos | teste falhado |
+| 3 | SAST (Semgrep) | Regras JavaScript, Node.js, OWASP Top 10, Dockerfile e GitHub Actions + regras próprias ([`.semgrep.yml`](../.semgrep.yml)) | achados `ERROR`/`WARNING` (`INFO` só é reportado) |
+| 4 | SAST & Quality Gate (SonarQube) | Corre se `SONAR_TOKEN` estiver configurado; `sonar.qualitygate.wait=true` faz o passo esperar pelo Quality Gate | Quality Gate falhado |
+| 5 | SCA (Snyk / npm audit) | Snyk com `SNYK_TOKEN`; sem token, `npm audit` das dependências de produção | vulnerabilidade HIGH/CRITICAL |
+| 6 | Container Security (Trivy) | Scan de configuração do Dockerfile e scan da imagem construída | má configuração HIGH/CRITICAL; CVE HIGH/CRITICAL **com correção disponível** |
+| 7 | DAST (OWASP ZAP) | Arranca **o container** (com `--read-only`) e corre o ZAP baseline contra ele | regras marcadas `FAIL` em [`.zap/rules.tsv`](../.zap/rules.tsv) |
+| 8 | Publish Signed Image | Só em `main`: imagem no GHCR com SBOM e proveniência SLSA, assinada com **cosign keyless** (OIDC do GitHub) e verificada | falha na assinatura ou verificação |
+
+Os resultados em SARIF (Gitleaks, Semgrep, Snyk, Trivy) ficam no separador **Security → Code scanning** do repositório.
+
+## Verificar a imagem publicada
+
 ```bash
-./gitleaks detect --source=. --config=.gitleaks.toml --verbose --redact --report-format=sarif --report-path=gitleaks-results.sarif
+cosign verify ghcr.io/ricardop24/secops:latest \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/RicardoP24/SecOps/'
 ```
-O parâmetro `--source=.` faz com que o Gitleaks analise a árvore de ficheiros da aplicação diretamente, eliminando o erro de revisão inexistente no Git e garantindo a deteção de segredos em qualquer tipo de commit (inicial, PR ou push regular).
-
----
-
-## 📑 Estrutura das Secções do Pipeline
-
-### 1. Metadados e Permissões
-- Configura permissões estritas `contents: read` e `security-events: write` para publicar relatórios SARIF na aba **Security > Code scanning** do GitHub.
-
-### 2. Estágio 1: Gitleaks (Secret Scanning)
-- Baixa a versão estável do Gitleaks e analisa todas as variáveis e ficheiros à procura de credenciais expostas.
-
-### 3. Estágio 2: Semgrep (SAST)
-- Utiliza a imagem Docker oficial do Semgrep para aplicar as regras de [.semgrep.yml](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/.semgrep.yml) e detetar antipadrões do OWASP Top 10.
-
-### 4. Estágio 3: SonarQube (Quality Gate)
-- Submete o projeto para o SonarQube caso o `SONAR_TOKEN` esteja configurado nos Secrets do GitHub. Se o token não estiver presente, executa um fallback limpo sem bloquear o repositório.
-
-### 5. Estágio 4: Snyk (SCA)
-- Instala as dependências do `package.json` com `npm ci` e analisa vulnerabilidades em bibliotecas de terceiros (SCA). Executa o `npm audit` nativo caso o `SNYK_TOKEN` não esteja configurado.
-
-### 6. Estágio 5: Trivy (Containers & Hardening)
-- Analisa a estrutura do [Dockerfile](file:///c:/Users/isr-rsilva.ISRETAIL/ci-cd-sec/Dockerfile) (IaC Config Scan) e faz o varrimento da imagem Docker compilada (`node:20-alpine`) contra CVEs conhecidas.
-
-### 7. Estágio 6: Deploy Final e Aprovação SSDLC
-- Exige aprovação de todos os 5 estágios anteriores antes de autorizar a promoção do software.

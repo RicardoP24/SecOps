@@ -1,23 +1,30 @@
-# Gitleaks Security Scan Configuration
-title = "DevSecOps SSDLC Gitleaks Configuration"
+# Gitleaks: full default ruleset + project-specific rules.
+title = "SecOps - Gitleaks configuration"
 
-[allowlist]
-description = "Global allowlist for false positives or documentation examples"
-paths = [
-  '''gitleaks.toml''',
-  '''README.md''',
-  '''scripts/.*'''
-]
+[extend]
+useDefault = true
 
-# Regras personalizadas adicionais se necessário
+# AWS's documented example key, used on purpose in the dashboard's mock data
+# to illustrate a blocked pull request. It is not a real credential.
+[[allowlists]]
+description = "Documented example values"
+regexes = ['''^AKIAIOSFODNN7EXAMPLE$''']
+
+# Lab fixture generator: it writes Bob's intentionally fake key into a lab branch,
+# and that branch is the one the pipeline must block (see docs/LAB_MULTIUSER_WORKFLOW.md).
+[[allowlists]]
+description = "Lab fixture generator"
+paths = ['''^scripts/setup-git-and-branches\.ps1$''']
+
 [[rules]]
 id = "generic-api-key-strict"
-description = "Deteção de API Keys genéricas com elevado padrão de entropia"
-regex = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*["']([A-Za-z0-9_\-]{20,})["']'''
+description = "Assignment to an identifier containing api_key/secret/token/password, high-entropy value"
+regex = '''(?i)[\w.-]*(?:api[_-]?key|secret|token|password)[\w.-]*\s*[:=]\s*["']([A-Za-z0-9_\-]{20,})["']'''
+secretGroup = 1
 tags = ["key", "secret", "owasp-a07"]
 
 [[rules]]
 id = "jwt-token"
-description = "Deteção de JSON Web Tokens (JWT) expostos"
+description = "Exposed JSON Web Token"
 regex = '''eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
 tags = ["jwt", "token"]

@@ -1,133 +1,108 @@
-# DevSecOps no Desenvolvimento Seguro (CI/CD) com GitHub Actions
+# SecOps: Pipeline DevSecOps (SSDLC) com GitHub Actions
 
-Este repositório é uma solução completa e de referência prática para a implementação do **Ciclo de Vida Seguro de Software (SSDLC - Secure Software Development Life Cycle)** através de automação **DevSecOps** no **GitHub Actions**.
+[![DevSecOps SSDLC Pipeline](https://github.com/RicardoP24/SecOps/actions/workflows/devsecops-pipeline.yml/badge.svg?branch=main)](https://github.com/RicardoP24/SecOps/actions/workflows/devsecops-pipeline.yml)
 
----
+Implementação prática do **Ciclo de Vida de Desenvolvimento de Software Seguro (SSDLC)** numa aplicação Node.js/Express:
+cada commit passa por **gates de segurança que bloqueiam de facto** o pipeline, e só o código aprovado em todos é publicado
+como imagem de container **assinada**.
 
-## 🛡️ Visão Geral & Filosofia "Shift-Left"
+- 📘 [Explicação detalhada do pipeline](docs/PIPELINE_EXPLANATION.md)
+- 🎭 [Laboratório multi-utilizador: Alice (código seguro) vs Bob (credencial exposta + `eval()`)](docs/LAB_MULTIUSER_WORKFLOW.md)
+- 🛠️ [Troubleshooting: problemas reais encontrados e como foram resolvidos](docs/TROUBLESHOOTING.md)
 
-O conceito de **DevSecOps** consiste na integração da segurança em todas as fases do ciclo de desenvolvimento, em vez de tratá-la como um controlo final isolado. A abordagem **"Shift-Left"** move os testes de segurança para o início da pipeline (no commit e na Pull Request), permitindo identificar e corrigir falhas de segurança mais cedo, com um custo drasticamente inferior.
+## Pipeline
 
 ```mermaid
 flowchart LR
-    A[Code & Commit] -->|Secret Scan| B(Gitleaks)
-    B -->|SAST| C(Semgrep)
-    C -->|Code Quality & Gates| D(SonarQube)
-    D -->|SCA Dependencies| E(Snyk)
-    E -->|Container Scan| F(Trivy)
-    F -->|Quality Gate Approved| G[Production Deployment]
+    A[Commit / PR] --> B[1. Gitleaks<br/>histórico completo]
+    B --> C[2. Testes]
+    B --> D[3. Semgrep SAST]
+    B --> E[4. SonarQube]
+    B --> F[5. Snyk / npm audit]
+    C & D & E & F --> G[6. Trivy<br/>Dockerfile + imagem]
+    G --> H[7. OWASP ZAP<br/>DAST no container]
+    H -->|main| I[8. GHCR<br/>SBOM + SLSA + cosign]
 ```
 
----
+| Gate | Ferramenta | Bloqueia quando |
+|---|---|---|
+| Segredos | **Gitleaks** (regras por omissão + regras do projeto, todo o histórico git) | qualquer segredo |
+| Testes | **node:test** (API, cabeçalhos de segurança, CORS, rate limiting, ficheiros não expostos) | teste falhado |
+| SAST | **Semgrep** (JavaScript, Node.js, OWASP Top 10, Dockerfile, GitHub Actions + regras próprias) | achado `ERROR`/`WARNING` |
+| SAST + qualidade | **SonarQube** Quality Gate (quando `SONAR_TOKEN` está configurado) | Quality Gate falhado |
+| SCA | **Snyk** (com `SNYK_TOKEN`) ou **npm audit** | dependência HIGH/CRITICAL |
+| Container | **Trivy**: configuração do Dockerfile e CVEs da imagem | HIGH/CRITICAL (CVEs com correção disponível) |
+| DAST | **OWASP ZAP** baseline contra o container em execução (`--read-only`) | regras `FAIL` em [`.zap/rules.tsv`](.zap/rules.tsv) |
+| Supply chain | **GHCR** + SBOM + proveniência SLSA + **cosign keyless** (só `main`) | falha de assinatura/verificação |
 
-## 🛠️ Tecnologias Utilizadas e o seu Papel no SSDLC
+Os resultados SARIF de Gitleaks, Semgrep, Snyk e Trivy aparecem em **Security → Code scanning**.
 
-### 1. Deteção Ativa de Credenciais Expostas (Secret Scanning)
-* **Tecnologia:** [Gitleaks](https://github.com/gitleaks/gitleaks)
-* **Fase no SSDLC:** Pre-commit & Integração Inicial (Commit / PR)
-* **Objetivo:** Impedir que palavras-passe, chaves de API (AWS, Azure, Stripe), tokens JWT e certificados sejam expostos no histórico do Git.
-* **Ficheiro de Configuração:** `.gitleaks.toml`
+### Segurança do próprio pipeline
 
-### 2. Análise Estática de Código - SAST Leve
-* **Tecnologia:** [Semgrep](https://semgrep.dev/)
-* **Fase no SSDLC:** Análise de Código Fonte (Static Code Analysis)
-* **Objetivo:** Analisar a sintaxe e semântica do código em busca de antipadrões de segurança (OWASP Top 10), injeção SQL, XSS, uso perigoso de `eval()`, sem necessidade de compilação.
-* **Ficheiro de Configuração:** `.semgrep.yml` e integração SARIF com o GitHub Security.
+- Todas as actions fixadas por **SHA de commit** (as tags são mutáveis).
+- Permissões mínimas: `contents: read` por omissão; permissões extra só no job que precisa delas.
+- Ferramentas com versão fixa (Gitleaks com verificação SHA-256, imagem Semgrep por digest).
+- `persist-credentials: false` no checkout; `concurrency` cancela execuções obsoletas.
 
-### 3. Análise Estática & Quality Gates
-* **Tecnologia:** [SonarQube](https://www.sonarsource.com/products/sonarqube/)
-* **Fase no SSDLC:** Validação de Qualidade e Segurança de Código
-* **Objetivo:** Identificar vulnerabilidades complexas, Security Hotspots, Code Smells e duplicações. Define o **Quality Gate**: se a nota de segurança não for "A", a pipeline é bloqueada.
-* **Ficheiro de Configuração:** `sonar-project.properties`
+## Aplicação
 
-### 4. Análise de Vulnerabilidades em Dependências (SCA)
-* **Tecnologia:** [Snyk Open Source](https://snyk.io/)
-* **Fase no SSDLC:** Análise de Composição de Software (Software Composition Analysis)
-* **Objetivo:** Verificar todas as bibliotecas e pacotes de terceiros no `package.json` contra uma base de dados de vulnerabilidades conhecidas (CVEs).
-* **Execução:** CLI automatizado com geração de relatório SARIF.
+API Express com um dashboard estático (`public/`) que simula o trabalho de uma equipa sob SSDLC.
 
-### 5. Varrimento e Hardening de Imagens de Containers
-* **Tecnologia:** [Trivy (Aqua Security)](https://trivy.dev/)
-* **Fase no SSDLC:** Empacotamento & Infraestrutura (Container Security)
-* **Objetivo:**
-  - Varrimento de vulnerabilidades do sistema operativo no container Docker (ex: `node:20-alpine`).
-  - Validação de Hardening no `Dockerfile` (ex: execução como utilizador não-root `USER node`).
-* **Ficheiros:** `Dockerfile` e `.dockerignore`
+| Controlo | Implementação |
+|---|---|
+| Cabeçalhos HTTP | Helmet com CSP (`script-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`) |
+| CORS | nenhuma origem externa por omissão; lista explícita via `CORS_ORIGINS` |
+| Rate limiting | `express-rate-limit`, 150 pedidos / 15 min, cabeçalhos `RateLimit` (draft-7) |
+| Exposição de ficheiros | só `public/` é servida; `package.json` e `src/` não são acessíveis |
+| Corpo dos pedidos | JSON limitado a 10 KB |
+| Container | `node:24-alpine` fixado por digest, multi-stage, sem npm na imagem final, utilizador `node`, `HEALTHCHECK` |
 
----
-
-## 📁 Estrutura do Repositório
+## Estrutura
 
 ```
-ci-cd-sec/
-├── .github/
-│   └── workflows/
-│       └── devsecops-pipeline.yml   # Workflow completo no GitHub Actions
-├── src/
-│   └── server.js                    # Microserviço backend Node.js (API REST segura)
+SecOps/
+├── .github/workflows/devsecops-pipeline.yml   # pipeline (8 stages)
+├── src/server.js                              # API Express
+├── public/                                    # dashboard (index.html, app.js, styles.css)
+├── test/server.test.js                        # testes (node:test)
 ├── scripts/
-│   └── run-local-security-audit.ps1 # Script de testes e auditoria local (PowerShell)
-├── .gitleaks.toml                   # Regras de deteção de segredos
-├── .semgrep.yml                     # Regras SAST personalizadas
-├── sonar-project.properties         # Configuração do SonarQube Scanner
-├── Dockerfile                       # Container seguro (Multi-stage + Non-root)
-├── .dockerignore                    # Ficheiros ignorados pelo build Docker
-├── package.json                     # Manifesto do projeto e dependências
-├── index.html                       # Dashboard Visual Interativo DevSecOps
-├── styles.css                       # Estilos Glassmorphism Dark Theme
-├── app.js                           # Motor de simulação do Dashboard
-└── README.md                        # Guia e documentação técnica do projeto
+│   ├── run-local-security-audit.ps1           # os mesmos gates, localmente, antes do push
+│   └── setup-git-and-branches.ps1             # cria as branches do laboratório (Alice / Bob)
+├── docs/                                      # pipeline, laboratório, troubleshooting
+├── .gitleaks.toml / .gitleaksignore           # regras e exceções justificadas do Gitleaks
+├── .semgrep.yml                               # regras SAST próprias
+├── .zap/rules.tsv                             # regras DAST que falham o build
+├── sonar-project.properties
+└── Dockerfile
 ```
 
----
-
-## 🚀 Como Executar o Projeto
-
-### 1. Executar a Aplicação e o Dashboard Interativo
-Pode arrancar a aplicação Node.js e aceder ao Dashboard no navegador:
+## Executar
 
 ```bash
-# Instalar dependências
-npm install
-
-# Iniciar o servidor
-npm start
-```
-Aceda a `http://localhost:3000` no seu navegador para ver o **Dashboard Interativo DevSecOps** com a simulação completa do pipeline.
-
----
-
-### 2. Executar Auditoria Local de Segurança (PowerShell)
-Para simular as verificações do pipeline no seu ambiente de desenvolvimento local sem depender do GitHub:
-
-```powershell
-# Executar o script de auditoria de segurança
-.\scripts\run-local-security-audit.ps1
+npm ci
+npm test
+npm start            # http://localhost:3000
 ```
 
+Com Docker:
+
+```bash
+docker build -t secops-app .
+docker run --rm -p 3000:3000 --read-only secops-app
+```
+
+Imagem publicada e assinada: `ghcr.io/ricardop24/secops`. Verificação da assinatura em
+[docs/PIPELINE_EXPLANATION.md](docs/PIPELINE_EXPLANATION.md#verificar-a-imagem-publicada).
+
+## Configuração opcional
+
+| Secret (Settings → Secrets and variables → Actions) | Efeito |
+|---|---|
+| `SONAR_TOKEN`, `SONAR_HOST_URL` | ativa o stage SonarQube + Quality Gate |
+| `SNYK_TOKEN` | usa o Snyk em vez do `npm audit` no stage SCA |
+
+Para impedir merges que não passem nos gates: **Settings → Branches → Require status checks to pass before merging** na branch `main`.
+
 ---
 
-## ⚙️ Configuração dos GitHub Secrets no GitHub Actions
-
-Para ativar todos os estágios do pipeline `.github/workflows/devsecops-pipeline.yml` num repositório GitHub real, adicione os seguintes segredos em **Settings > Secrets and variables > Actions**:
-
-| Nome do Secret | Descrição | Origem |
-| :--- | :--- | :--- |
-| `SONAR_TOKEN` | Token de autenticação do SonarQube / SonarCloud | Painel do SonarQube |
-| `SONAR_HOST_URL` | URL da instância do SonarQube (ex: `https://sonarcloud.io`) | Servidor SonarQube |
-| `SNYK_TOKEN` | Token API de conta Snyk | Painel de definições de conta no Snyk.io |
-| `GITHUB_TOKEN` | Gerado automaticamente pelo GitHub Actions | Nativo do GitHub |
-
----
-
-## 📊 Definição de Security Quality Gates
-
-No fluxo de desenvolvimento seguro (SSDLC), um **Quality Gate** atua como uma barreira automática que impede a promoção do código se um critério de segurança for violado:
-
-1. **Gate 1 (Gitleaks):** 0 Segredos ou credenciais expostas.
-2. **Gate 2 (Semgrep):** 0 Vulnerabilidades de severidade `ERROR` (OWASP Top 10).
-3. **Gate 3 (SonarQube):** Rating de Segurança **A**, 0 Vulnerabilidades Críticas.
-4. **Gate 4 (Snyk):** 0 Vulnerabilidades em dependências com severidade `HIGH` ou `CRITICAL`.
-5. **Gate 5 (Trivy):** 0 Vulnerabilidades críticas na Imagem Docker e cumprimento do Hardening do `Dockerfile`.
-
-Se qualquer um dos portões falhar, o job final `build-and-verify` não é executado e o deployment é abortado.
+Ricardo Pilartes da Silva · [LinkedIn](https://www.linkedin.com/in/ricardo-pilartes-da-silva-54243b221/) · [GitHub](https://github.com/RicardoP24)

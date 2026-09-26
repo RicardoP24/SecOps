@@ -1,12 +1,12 @@
 {
   "name": "devsecops-ssdlc-demo",
   "version": "1.0.0",
-  "description": "Demonstração de aplicação segura integrando DevSecOps, SSDLC e ferramentas de segurança no CI/CD",
+  "description": "Aplicação Node.js de demonstração com pipeline DevSecOps (SSDLC) no GitHub Actions",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --check src/server.js",
-    "sec:audit": "npm audit",
+    "test": "node --test",
+    "sec:audit": "npm audit --omit=dev --audit-level=high",
     "sec:scan-local": "powershell -ExecutionPolicy Bypass -File ./scripts/run-local-security-audit.ps1"
   },
   "keywords": [
@@ -21,16 +21,19 @@
     "sonarqube",
     "snyk"
   ],
-  "author": "DevSecOps Team",
+  "author": "Ricardo Pilartes da Silva",
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.2.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5"
+    "cors": "^2.8.5"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RicardoP24/SecOps.git"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

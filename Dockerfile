@@ -1,25 +1,29 @@
-# ==============================================================================
-# Dockerfile com Vulnerabilidades e Falhas de Hardening Propositadas (Para Testar Trivy)
-# ==============================================================================
+# syntax=docker/dockerfile:1
 
-# 1. IMAGEM BASE DESATUALIZADA E VULNERÁVEL (Trivy irá detetar dezenas de CVEs Críticas!)
-FROM php:7.4-apache
+# Imagem base fixada por digest (as tags são mutáveis, os digests não). Node 24 = LTS ativa.
 
-# 2. SEGREDO HARDCODED EM VARIÁVEL DE AMBIENTE (Trivy IaC & Gitleaks scan)
-ENV DB_ROOT_PASSWORD="UnsecureRootPassword123!"
-ENV AWS_ACCESS_KEY_ID="MOCK_AWS_ACCESS_KEY_SECRET_12345"
+# ---- build: instala apenas as dependências de produção a partir do lockfile ----
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
-WORKDIR /var/www/html
+# ---- runtime: sem npm/yarn/corepack (e as suas dependências vulneráveis), utilizador não-root ----
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+RUN apk upgrade --no-cache \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+              /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* \
+              /usr/local/bin/yarn /usr/local/bin/yarnpkg
+WORKDIR /app
+ENV NODE_ENV=production
 
-# Copiar ficheiros PHP e Node.js
-COPY src/ /var/www/html/
+COPY --from=builder /app/node_modules ./node_modules
+COPY package.json ./
+COPY src/ ./src/
+COPY public/ ./public/
 
-# 3. EXPOSIÇÃO DE PORTA INSEGURA (SSH Port Expose)
-EXPOSE 22
-EXPOSE 80
-
-# 4. EXECUÇÃO COMO UTILIZADOR ROOT (Violador de Hardening CIS Benchmark / Trivy Exit Code 1)
-# Repare que NÃO definimos "USER www-data", o container corre como root!
-USER root
-
-CMD ["apache2-foreground"]
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+    CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+CMD ["node", "src/server.js"]
